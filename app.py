@@ -21,7 +21,7 @@ def fetch_and_parse_weather_data():
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization={API_KEY}"
     
     try:
-        response = requests.get(url)
+        response = requests.get(url, verify=False)
         response.raise_for_status()
         raw_data = response.json()
         
