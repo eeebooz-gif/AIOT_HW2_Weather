@@ -4,6 +4,8 @@ import sqlite3
 import requests
 import pandas as pd
 import streamlit as st
+import folium
+from streamlit_folium import st_folium
 from dotenv import load_dotenv
 
 # 讀取 .env 檔案中的環境變數
@@ -11,6 +13,19 @@ load_dotenv()
 API_KEY = os.getenv("CWA_API_KEY")
 
 DB_NAME = "data.db"
+
+# ==========================================
+# 準備台灣各區域的概略經緯度字典
+# ==========================================
+REGION_COORDS = {
+    "北部地區": [25.0330, 121.5654],
+    "中部地區": [24.1477, 120.6736],
+    "南部地區": [22.6273, 120.3014],
+    "東北部地區": [24.7562, 121.7588],
+    "東部地區": [23.9872, 121.6012],
+    "東南部地區": [22.7583, 121.1444],
+    "離島地區": [23.5711, 119.5848]
+}
 
 # ==========================================
 # HW2-1 & HW2-2: 獲取與分析天氣預報資料
@@ -163,15 +178,44 @@ def main():
         df = pd.read_sql_query(query, conn)
         
         if not df.empty:
-            st.markdown(f"### Temperature Trends for {selected_region}")
+            # 建立三個 Tabs：一個放折線圖，一個放地圖，一個放表格
+            tab1, tab2, tab3 = st.tabs(["📈 氣溫趨勢圖", "🗺️ 全台今日氣溫地圖", "📋 詳細資料表"])
             
-            # 設定折線圖的 X 軸為 dataDate，符合截圖規格
-            chart_data = df.set_index('dataDate')
-            st.line_chart(chart_data[['MinT', 'MaxT']])
-            
-            st.markdown(f"### Temperature Data for {selected_region}")
-            # 顯示資料表
-            st.dataframe(df, use_container_width=True)
+            with tab1:
+                st.markdown(f"### {selected_region} 未來一週氣溫趨勢")
+                # 這裡可以放你原本的 st.line_chart 或剛才升級的 plotly 圖表
+                chart_data = df.set_index('dataDate')
+                st.line_chart(chart_data[['MinT', 'MaxT']])
+                
+            with tab2:
+                st.markdown("### 🗺️ 今日全台氣象預報概況")
+                # 抓取資料庫裡面的「第一天 (通常是今天)」來畫全台地圖
+                first_date = pd.read_sql_query("SELECT MIN(dataDate) FROM TemperatureForecasts", conn).iloc[0, 0]
+                map_df = pd.read_sql_query(f"SELECT regionName, MinT, MaxT FROM TemperatureForecasts WHERE dataDate = '{first_date}'", conn)
+                
+                # 建立 Folium 地圖，中心點設定在台灣中心 (南投附近)
+                m = folium.Map(location=[23.6978, 120.9605], zoom_start=7, tiles="CartoDB positron")
+                
+                # 把各個地區的氣溫圖釘加到地圖上
+                for _, row in map_df.iterrows():
+                    r_name = row['regionName']
+                    if r_name in REGION_COORDS:
+                        # 設定圖釘彈出視窗的內容
+                        popup_html = f"<b>{r_name}</b><br>最高溫: {row['MaxT']}°C<br>最低溫: {row['MinT']}°C"
+                        
+                        folium.Marker(
+                            location=REGION_COORDS[r_name],
+                            popup=folium.Popup(popup_html, max_width=200),
+                            tooltip=f"{r_name} (點擊查看氣溫)",
+                            icon=folium.Icon(color="blue", icon="info-sign")
+                        ).add_to(m)
+                
+                # 將 Folium 地圖渲染到 Streamlit 上
+                st_folium(m, width=700, height=500)
+                
+            with tab3:
+                st.markdown(f"### {selected_region} 原始預報資料")
+                st.dataframe(df, use_container_width=True, hide_index=True)
         else:
             st.info("該地區目前沒有資料。")
             
