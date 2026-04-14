@@ -124,7 +124,19 @@ def init_db(data):
 # ==========================================
 def main():
     # 1. 系統初始化：拉取資料並建置資料庫
-    if not os.path.exists(DB_NAME):
+    needs_fetch = True
+    if os.path.exists(DB_NAME):
+        try:
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM TemperatureForecasts")
+            if cursor.fetchone()[0] > 0:
+                needs_fetch = False
+            conn.close()
+        except Exception:
+            pass
+
+    if needs_fetch:
         with st.spinner('正在從 CWA API 獲取天氣資料並建立資料庫...'):
             weather_data = fetch_and_parse_weather_data()
             init_db(weather_data)
